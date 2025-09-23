@@ -2,6 +2,8 @@
 // FastIntersectLine Originally made by nheir, modified for Kaizo Network by +KZ
 // FastIntersectLinePortalLaser based on FastIntersectLine by nheir
 // IntersectCharacterCore based on IntersectCharacter from Teeworlds
+// GetAnimationTransform m_Time OutOfRange InsideTriangle InsideQuad BarycentricCoordinates and Rotate were taken from Kaffeine's Infclass, modified by +KZ for Kaizo Network
+// det() and AreLinesColliding() were taken from internet code examples
 
 #include <base/math.h>
 #include <base/system.h>
@@ -10,6 +12,7 @@
 #include <antibot/antibot_data.h>
 
 #include <cmath>
+#include <vector>
 #include <engine/map.h>
 
 #include <game/collision.h>
@@ -18,6 +21,7 @@
 
 #include <engine/shared/config.h>
 #include "collision.h"
+#include <game/kz/envelopeaccess.h>
 
 int CCollision::GetCollisionAt(float x, float y, SKZColCharCoreParams *pCharCoreParams) const
 {
@@ -1047,4 +1051,777 @@ bool CCollision::TestBoxKZ(vec2 OrigPos, vec2 *pInOutPos, vec2 *pInOutVel, vec2 
 	}
 
 	return false;
+}
+
+void CCollision::UpdateQuadCache()
+{
+	for(int i = 0; i < m_aKZQuads.size(); i++)
+	{
+
+		//Get moved quad pos
+
+		vec2 Position = vec2(0,0);
+
+		GetAnimationTransform(m_Time + (m_aKZQuads[i].m_pQuad->m_PosEnvOffset / 1000.0), m_aKZQuads[i].m_pQuad->m_PosEnv, Position, m_aKZQuads[i].m_CachedAngle);
+
+		//Set Center first
+		m_aKZQuads[i].m_CachedPos[4] = vec2(fx2f(m_aKZQuads[i].m_pQuad->m_aPoints[4].x), fx2f(m_aKZQuads[i].m_pQuad->m_aPoints[4].y)) + Position;
+
+		//Cache corners
+		for(int j = 0; j < 4; j ++)
+		{
+			m_aKZQuads[i].m_CachedPos[j] = Position + vec2(fx2f(m_aKZQuads[i].m_pQuad->m_aPoints[j].x), fx2f(m_aKZQuads[i].m_pQuad->m_aPoints[j].y));
+		}
+
+		//Rotate Cached corners
+		if(m_aKZQuads[i].m_CachedAngle != 0)
+		{
+			Rotate(m_aKZQuads[i].m_CachedPos[4], &m_aKZQuads[i].m_CachedPos[0], m_aKZQuads[i].m_CachedAngle);
+			Rotate(m_aKZQuads[i].m_CachedPos[4], &m_aKZQuads[i].m_CachedPos[1], m_aKZQuads[i].m_CachedAngle);
+			Rotate(m_aKZQuads[i].m_CachedPos[4], &m_aKZQuads[i].m_CachedPos[2], m_aKZQuads[i].m_CachedAngle);
+			Rotate(m_aKZQuads[i].m_CachedPos[4], &m_aKZQuads[i].m_CachedPos[3], m_aKZQuads[i].m_CachedAngle);
+		}
+	}
+}
+
+std::vector<SKZQuadData *> CCollision::GetQuadsAt(vec2 Pos)
+{
+	std::vector<SKZQuadData *> apQuads;
+
+	for(int i = 0; i < m_aKZQuads.size(); i++)
+	{
+		if(OutOfRange(Pos.x, m_aKZQuads[i].m_CachedPos[0].x, m_aKZQuads[i].m_CachedPos[1].x, m_aKZQuads[i].m_CachedPos[2].x, m_aKZQuads[i].m_CachedPos[3].x))
+			continue;
+		if(OutOfRange(Pos.y, m_aKZQuads[i].m_CachedPos[0].y, m_aKZQuads[i].m_CachedPos[1].y, m_aKZQuads[i].m_CachedPos[2].y, m_aKZQuads[i].m_CachedPos[3].y))
+			continue;
+
+		if(InsideQuad(m_aKZQuads[i].m_CachedPos[0], m_aKZQuads[i].m_CachedPos[1], m_aKZQuads[i].m_CachedPos[2], m_aKZQuads[i].m_CachedPos[3], Pos))
+		{
+			apQuads.push_back(&m_aKZQuads[i]);
+		}
+	}
+
+	return apQuads;
+}
+
+int CCollision::QuadTypeToTileId(int Type)
+{
+	switch (Type)
+	{
+	case KZQUADTYPE_FREEZE:
+		return TILE_FREEZE;
+	case KZQUADTYPE_UNFREEZE:
+		return TILE_UNFREEZE;
+	case KZQUADTYPE_HOOK:
+		return TILE_SOLID;
+	case KZQUADTYPE_UNHOOK:
+		return TILE_NOHOOK;
+	case KZQUADTYPE_STOPA:
+		return TILE_STOPA;
+	case KZQUADTYPE_DEATH:
+		return TILE_DEATH;
+	case KZQUADTYPE_CFRM:
+		return TILE_TELECHECKINEVIL;
+	}
+	return TILE_AIR;
+}
+
+void CCollision::PushBoxOutsideQuads(vec2 *pPos, vec2 *pInOutVel, vec2 Size, CCharacterCore * pCore, bool * pGrounded)
+{
+	vec2 BoxCorners[4];
+
+	Size *= 0.5f;
+
+	//vertically first, then horizontally
+
+	bool exit = false;
+	bool horizontal = false;
+	do
+	{
+
+		if(!horizontal)
+		{
+			BoxCorners[0].x = pPos->x - Size.x + 1;
+			BoxCorners[0].y = pPos->y - Size.y + pInOutVel->y;
+
+			BoxCorners[1].x = pPos->x + Size.x - 1;
+			BoxCorners[1].y = pPos->y - Size.y + pInOutVel->y;
+
+			BoxCorners[2].x = pPos->x - Size.x + 1;
+			BoxCorners[2].y = pPos->y + Size.y + pInOutVel->y;
+
+			BoxCorners[3].x = pPos->x + Size.x - 1;
+			BoxCorners[3].y = pPos->y + Size.y + pInOutVel->y;
+		}
+		else
+		{
+			BoxCorners[0].x = pPos->x - Size.x + pInOutVel->x;
+			BoxCorners[0].y = pPos->y - Size.y + pInOutVel->y + 1;
+
+			BoxCorners[1].x = pPos->x + Size.x + pInOutVel->x;
+			BoxCorners[1].y = pPos->y - Size.y + pInOutVel->y - 1;
+
+			BoxCorners[2].x = pPos->x - Size.x + pInOutVel->x;
+			BoxCorners[2].y = pPos->y + Size.y + pInOutVel->y + 1;
+
+			BoxCorners[3].x = pPos->x + Size.x + pInOutVel->x;
+			BoxCorners[3].y = pPos->y + Size.y + pInOutVel->y - 1;
+		}
+
+		bool docontinue;
+		for(int i = 0; i < m_aKZQuads.size(); i++)
+		{
+			if(m_aKZQuads[i].m_Type != KZQUADTYPE_HOOK && m_aKZQuads[i].m_Type != KZQUADTYPE_UNHOOK && m_aKZQuads[i].m_Type != KZQUADTYPE_STOPA)
+				continue;
+
+			docontinue = true;
+			for(int j = 0; j < 4; j++)
+			{
+				if(!OutOfRange(BoxCorners[j].x, m_aKZQuads[i].m_CachedPos[0].x, m_aKZQuads[i].m_CachedPos[1].x, m_aKZQuads[i].m_CachedPos[2].x, m_aKZQuads[i].m_CachedPos[3].x) && !OutOfRange(BoxCorners[j].y, m_aKZQuads[i].m_CachedPos[0].y, m_aKZQuads[i].m_CachedPos[1].y, m_aKZQuads[i].m_CachedPos[2].y, m_aKZQuads[i].m_CachedPos[3].y))
+				{
+					docontinue = false;
+					break;
+				}
+			}
+
+			if(docontinue)
+				continue;
+
+			
+				if(!horizontal)
+				{
+					float altdown[4] = {-9999,-9999,-9999,-9999};
+					
+					//commented, always do vertical collision for all lines
+					//if(std::abs(m_aKZQuads[i].m_CachedPos[0].x - m_aKZQuads[i].m_CachedPos[1].x) >= std::abs(m_aKZQuads[i].m_CachedPos[0].y - m_aKZQuads[i].m_CachedPos[1].y))
+						altdown[0] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[0], m_aKZQuads[i].m_CachedPos[1]);
+					//if(std::abs(m_aKZQuads[i].m_CachedPos[1].x - m_aKZQuads[i].m_CachedPos[3].x) >= std::abs(m_aKZQuads[i].m_CachedPos[1].y - m_aKZQuads[i].m_CachedPos[3].y))
+						altdown[1] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[1], m_aKZQuads[i].m_CachedPos[3]);
+					//if(std::abs(m_aKZQuads[i].m_CachedPos[3].x - m_aKZQuads[i].m_CachedPos[2].x) >= std::abs(m_aKZQuads[i].m_CachedPos[3].y - m_aKZQuads[i].m_CachedPos[2].y))
+						altdown[2] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[3], m_aKZQuads[i].m_CachedPos[2]);
+					//if(std::abs(m_aKZQuads[i].m_CachedPos[2].x - m_aKZQuads[i].m_CachedPos[0].x) >= std::abs(m_aKZQuads[i].m_CachedPos[2].y - m_aKZQuads[i].m_CachedPos[0].y))
+						altdown[3] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[2], m_aKZQuads[i].m_CachedPos[0]);
+					
+					float finalaltdown = altdown[0];
+
+					for(int k = 1; k < 4; k++)
+					{
+						if(std::abs(finalaltdown - pPos->y) > std::abs(altdown[k] - pPos->y))
+							finalaltdown = altdown[k];
+					}
+
+					if (finalaltdown == -9999)
+					{
+						continue;
+					}
+
+					if(finalaltdown <= pPos->y + Size.y && finalaltdown > pPos->y)
+					{
+						pPos->y = finalaltdown - Size.y;
+						if(pInOutVel->y > 0)
+							pInOutVel->y = 0;
+
+						if(pGrounded && m_aKZQuads[i].m_Type != KZQUADTYPE_STOPA) //set grounded if not stopper quad
+						{
+							*pGrounded = true;
+						}
+					}
+					else if(finalaltdown >= pPos->y - Size.y && finalaltdown < pPos->y)
+					{
+						pPos->y = finalaltdown + Size.y;
+						if(pInOutVel->y < 0)
+							pInOutVel->y = 0;
+					}
+				}
+				else
+				{
+
+					float altdown[4] = {-9999,-9999,-9999,-9999};
+					
+					if(std::abs(m_aKZQuads[i].m_CachedPos[0].x - m_aKZQuads[i].m_CachedPos[1].x) < std::abs(m_aKZQuads[i].m_CachedPos[0].y - m_aKZQuads[i].m_CachedPos[1].y))
+						altdown[0] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[0], m_aKZQuads[i].m_CachedPos[1]);
+					if(std::abs(m_aKZQuads[i].m_CachedPos[1].x - m_aKZQuads[i].m_CachedPos[3].x) < std::abs(m_aKZQuads[i].m_CachedPos[1].y - m_aKZQuads[i].m_CachedPos[3].y))
+						altdown[1] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[1], m_aKZQuads[i].m_CachedPos[3]);
+					if(std::abs(m_aKZQuads[i].m_CachedPos[3].x - m_aKZQuads[i].m_CachedPos[2].x) < std::abs(m_aKZQuads[i].m_CachedPos[3].y - m_aKZQuads[i].m_CachedPos[2].y))
+						altdown[2] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[3], m_aKZQuads[i].m_CachedPos[2]);
+					if(std::abs(m_aKZQuads[i].m_CachedPos[2].x - m_aKZQuads[i].m_CachedPos[0].x) < std::abs(m_aKZQuads[i].m_CachedPos[2].y - m_aKZQuads[i].m_CachedPos[0].y))
+						altdown[3] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[2], m_aKZQuads[i].m_CachedPos[0]);
+					
+					float finalaltdown = altdown[0];
+
+					for(int k = 1; k < 4; k++)
+					{
+						if(std::abs(finalaltdown - pPos->x) > std::abs(altdown[k] - pPos->x))
+							finalaltdown = altdown[k];
+					}
+
+					if (finalaltdown == -9999)
+					{
+						continue;
+					}
+
+					if(finalaltdown <= pPos->x + Size.x && finalaltdown > pPos->x)
+					{
+						pPos->x = finalaltdown - Size.x;
+						if(pInOutVel->x > 0)
+							pInOutVel->x = 0;
+					}
+					else if(finalaltdown >= pPos->x - Size.x && finalaltdown < pPos->x)
+					{
+						pPos->x = finalaltdown + Size.x;
+						if(pInOutVel->x < 0)
+							pInOutVel->x = 0;
+					}
+				}
+
+				if(pCore)
+				{
+					pCore->m_SendCoreThisTick = true;
+				}
+			
+		}
+
+		if(!horizontal)
+			horizontal = true;
+		else
+			exit = true;
+	} while(!exit);
+	
+}
+
+static inline float det(float a, float b, float c, float d) {
+    return a * d - b * c;
+}
+
+bool CCollision::AreLinesColliding(vec2 p1, vec2 p2, vec2 p3, vec2 p4, vec2 *interseccion) {
+    float dx1 = p2.x - p1.x;
+    float dy1 = p2.y - p1.y;
+    float dx2 = p4.x - p3.x;
+    float dy2 = p4.y - p3.y;
+
+    float denom = det(dx1, dy1, dx2, dy2);
+
+    if (fabsf(denom) < 1e-6f) {
+        return 0;
+    }
+
+    float dx = p3.x - p1.x;
+    float dy = p3.y - p1.y;
+
+    float t = det(dx, dy, dx2, dy2) / denom;
+    float u = det(dx, dy, dx1, dy1) / denom;
+
+    if (t >= 0.0f && t <= 1.0f && u >= 0.0f && u <= 1.0f) {
+        if (interseccion) {
+            interseccion->x = p1.x + t * dx1;
+            interseccion->y = p1.y + t * dy1;
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+bool CCollision::IntersectQuad(vec2 From, vec2 To, vec2 *pOut, vec2 *pLineStart, vec2 *pLineEnd, vec2 pos1, vec2 pos2, vec2 pos3, vec2 pos4)
+{
+	vec2 intersect[4];
+	bool intersected[4] = {false,false,false,false};
+
+	intersected[0] = AreLinesColliding(From,To,pos1,pos2, &intersect[0]);
+	intersected[1] = AreLinesColliding(From,To,pos2,pos4, &intersect[1]);
+	intersected[2] = AreLinesColliding(From,To,pos4,pos3, &intersect[2]);
+	intersected[3] = AreLinesColliding(From,To,pos3,pos1, &intersect[3]);
+
+	if(pOut || pLineStart || pLineEnd)
+	{
+		bool intersectedbool = false;
+		int best = -1;
+		
+		if(intersected[0])
+		{
+			best = 0;
+			intersectedbool = true;
+		}
+
+		for(int i = 1; i < 4;i++)
+		{
+			if(!intersected[i])
+				continue;
+
+			intersectedbool = true;
+
+			if(best == -1)
+			{
+				best = i;
+				continue;
+			}
+
+			if(distance(From,intersect[best]) > distance(From,intersect[i]))
+			{
+				best = i;
+			}
+		}
+
+		if(best == -1)
+		{
+			if(pOut)
+				*pOut = To;
+		}
+		else
+		{
+			if(pOut)
+				*pOut = intersect[best];
+			if(pLineStart)
+			{
+				switch(best)
+				{
+					case 0:
+						*pLineStart = pos1;
+						break;
+					case 1:
+						*pLineStart = pos2;
+						break;
+					case 2:
+						*pLineStart = pos4;
+						break;
+					case 3:
+						*pLineStart = pos3;
+						break;
+				}
+			}
+			if(pLineEnd)
+			{
+				switch(best)
+				{
+					case 0:
+						*pLineEnd = pos2;
+						break;
+					case 1:
+						*pLineEnd = pos4;
+						break;
+					case 2:
+						*pLineEnd = pos3;
+						break;
+					case 3:
+						*pLineEnd = pos1;
+						break;
+				}
+			}
+		}
+		return intersectedbool;
+	}
+	else
+	{
+		for(int i = 0; i < 4; i++)
+		{
+			if(intersected[i])
+				return true;
+		}
+		return false;
+	}
+}
+
+SKZQuadData * CCollision::IntersectQuad(vec2 From, vec2 To, vec2 *pOut, vec2 *pLineStart, vec2 *pLineEnd)
+{
+	SKZQuadData * pQuad = nullptr;
+
+	for(int i = 0; i < m_aKZQuads.size(); i++)
+	{
+		if(m_aKZQuads[i].m_Type != KZQUADTYPE_HOOK && m_aKZQuads[i].m_Type != KZQUADTYPE_UNHOOK)
+			continue;
+
+		if(IntersectQuad(From,To,pOut,pLineStart,pLineStart,m_aKZQuads[i].m_CachedPos[0],m_aKZQuads[i].m_CachedPos[1],m_aKZQuads[i].m_CachedPos[2],m_aKZQuads[i].m_CachedPos[3]))
+		{
+			pQuad = &m_aKZQuads[i];
+			break;
+		}
+	}
+
+	return pQuad;
+}
+
+vec2 CCollision::ReflexLineOnLine(vec2 Point, vec2 Center, vec2 P1)
+{
+	float wallangle = atan2(Center.x - P1.x,Center.y - P1.y);
+
+	float lineangle = atan2(Point.x - Center.x,Point.y - Center.y);
+
+	float bounceangle = lineangle - wallangle;
+	
+	bounceangle = 3.14159f - bounceangle;
+
+	bounceangle += wallangle;
+
+	Point = vec2(sin(bounceangle),cos(bounceangle));
+
+	return Point;
+}
+
+float CCollision::CalculateSlopeAltitude(float xleft, float xright, vec2 pos1, vec2 pos2)
+{
+	float linewidth = pos1.x - pos2.x;
+	float lineheight = pos1.y - pos2.y;
+
+	if(linewidth < 0) // pos1 -> pos2
+	{
+		if(xright < pos1.x || xleft > pos2.x)
+			return -9999; //invalid
+
+		if(lineheight < 0) // up-down
+		{
+			//printf("-> updown\n");
+			if(xleft < pos1.x)
+			{
+				return pos1.y;
+			}
+			else
+			{
+				return pos1.y + (lineheight / linewidth) * (xleft - pos1.x);
+			}
+		}
+		else if (lineheight > 0) // down-up
+		{
+			//printf("-> downup\n");
+			if(xright > pos2.x)
+			{
+				return pos2.y;
+			}
+			else
+			{
+				return pos1.y + (lineheight / linewidth) * (xright - pos1.x);
+			}
+		}
+		else
+		{
+			return pos1.y;
+		}
+		
+	}
+	else // pos2 -> pos1
+	{
+		if(xright < pos2.x || xleft > pos1.x)
+			return -9999; //invalid
+
+		if(lineheight > 0) // up-down
+		{
+			//printf("<- updown\n");
+			if(xleft < pos2.x)
+			{
+				return pos2.y;
+			}
+			else
+			{
+				return pos1.y + (lineheight / linewidth) * (xleft - pos1.x);
+			}
+		}
+		else if(lineheight < 0) // down-up
+		{
+			//printf("<- downup\n");
+			if(xright > pos1.x)
+			{
+				return pos1.y;
+			}
+			else
+			{
+				return pos1.y + (lineheight / linewidth) * (xright - pos1.x);
+			}
+		}
+		else
+		{
+			return pos1.y;
+		}
+	}
+}
+
+float CCollision::CalculateSlopeAltitudeSide(float xup, float xdown, vec2 pos1, vec2 pos2)
+{
+	float linewidth = pos1.x - pos2.x;
+	float lineheight = pos1.y - pos2.y;
+
+	if(lineheight < 0) // pos1 V pos 2
+	{
+		if(xdown < pos1.y || xup > pos2.y)
+			return -9999; //invalid
+
+		if(linewidth > 0) // left-right
+		{
+			//printf("V leftright\n");
+			if(xdown > pos2.y)
+			{
+				return pos2.x;
+			}
+			else
+			{
+				return pos1.x + (linewidth / lineheight) * (xdown - pos1.y);
+			}
+		}
+		else if(linewidth < 0)// right-left
+		{
+			//printf("V rightleft\n");
+			if(xup < pos1.y)
+			{
+				return pos2.x;
+			}
+			else
+			{
+				return pos1.x + (linewidth / lineheight) * (xup - pos1.y);
+			}
+		}
+		else
+		{
+			return pos1.x;
+		}
+		
+	}
+	else // pos2 V pos1
+	{
+		if(xdown < pos2.y || xup > pos1.y)
+			return -9999; //invalid
+
+		if(linewidth > 0) // right-left
+		{
+			//printf("^ rightleft\n");
+			if(xup < pos2.y)
+			{
+				return pos2.x;
+			}
+			else
+			{
+				return pos1.x + (linewidth / lineheight) * (xup - pos1.y);
+			}
+		}
+		else if(linewidth < 0) // left-right
+		{
+			//printf("^ leftright\n");
+			if(xdown > pos1.y)
+			{
+				return pos1.x;
+			}
+			else
+			{
+				return pos1.x + (linewidth / lineheight) * (xdown - pos1.y);
+			}
+		}
+		else
+		{
+			return pos1.x;
+		}
+	}
+}
+
+void CCollision::Rotate(const vec2 Center, vec2 * pPoint, float Rotation) const
+{
+	float x = pPoint->x - Center.x;
+	float y = pPoint->y - Center.y;
+	pPoint->x = (x * cosf(Rotation) - y * sinf(Rotation) + Center.x);
+	pPoint->y = (x * sinf(Rotation) + y * cosf(Rotation) + Center.y);
+}
+
+void CCollision::GetAnimationTransform(float GlobalTime, int Env, vec2 &Position, float &Angle) const
+{
+	Position.x = 0.0f;
+	Position.y = 0.0f;
+	Angle = 0.0f;
+	
+	int Start, Num;
+	m_pLayers->Map()->GetType(MAPITEMTYPE_ENVELOPE, &Start, &Num);
+	if(Env >= Num)
+		return;
+	CMapItemEnvelope *pItem = (CMapItemEnvelope *)m_pLayers->Map()->GetItem(Start+Env, 0, 0);
+	
+	if(pItem->m_NumPoints == 0)
+		return;
+
+	CMapBasedEnvelopePointAccess EnvelopePoints(m_pLayers->Map());
+	EnvelopePoints.SetPointsRange(pItem->m_StartPoint, pItem->m_NumPoints);
+	
+	if(EnvelopePoints.NumPoints() == 0)
+		return;
+
+	if(EnvelopePoints.NumPoints() == 1)
+	{
+		Position.x = fx2f(EnvelopePoints.GetPoint(0)->m_aValues[0]);
+		Position.y = fx2f(EnvelopePoints.GetPoint(0)->m_aValues[1]);
+		Angle = fx2f(EnvelopePoints.GetPoint(0)->m_aValues[2])/360.0f*pi*2.0f;
+		return;
+	}
+
+	float Time = fmod(GlobalTime, EnvelopePoints.GetPoint(pItem->m_NumPoints-1)->m_Time.GetInternal()/1000.0f)*1000.0f;
+	for(int i = 0; i < pItem->m_NumPoints-1; i++)
+	{
+		if(Time >= EnvelopePoints.GetPoint(i)->m_Time.GetInternal() && Time <= EnvelopePoints.GetPoint(i+1)->m_Time.GetInternal())
+		{
+			float Delta = EnvelopePoints.GetPoint(i+1)->m_Time.GetInternal()-EnvelopePoints.GetPoint(i)->m_Time.GetInternal();
+			float a = (Time-EnvelopePoints.GetPoint(i)->m_Time.GetInternal())/Delta;
+			switch (EnvelopePoints.GetPoint(i)->m_Curvetype)
+			{
+				case CURVETYPE_SMOOTH:
+				{
+					a = -2*a*a*a + 3*a*a; // second hermite basis
+					break;
+				}
+				case CURVETYPE_SLOW:
+				{
+					a = a*a*a;
+					break;
+				}
+				case CURVETYPE_FAST:
+				{
+					a = 1-a;
+					a = 1-a*a*a;
+					break;
+				}
+				case CURVETYPE_STEP:
+				{
+					a = 0;
+					break;
+				}
+				case CURVETYPE_BEZIER:
+				{
+					const CEnvPointBezier *pCurrentPointBezier = EnvelopePoints.GetBezier(i);
+					const CEnvPointBezier *pNextPointBezier = EnvelopePoints.GetBezier(i + 1);
+					if(pCurrentPointBezier == nullptr || pNextPointBezier == nullptr)
+						break; // fallback to linear
+					for(size_t c = 0; c < 3; c++)
+					{
+						// monotonic 2d cubic bezier curve
+						const vec2 p0 = vec2(EnvelopePoints.GetPoint(i)->m_Time.GetInternal(), fx2f(EnvelopePoints.GetPoint(i)->m_aValues[c]));
+						const vec2 p3 = vec2(EnvelopePoints.GetPoint(i+1)->m_Time.GetInternal(), fx2f(EnvelopePoints.GetPoint(i+1)->m_aValues[c]));
+
+						const vec2 OutTang = vec2(pCurrentPointBezier->m_aOutTangentDeltaX[c].GetInternal(), fx2f(pCurrentPointBezier->m_aOutTangentDeltaY[c]));
+						const vec2 InTang = vec2(pNextPointBezier->m_aInTangentDeltaX[c].GetInternal(), fx2f(pNextPointBezier->m_aInTangentDeltaY[c]));
+
+						vec2 p1 = p0 + OutTang;
+						vec2 p2 = p3 + InTang;
+
+						// validate bezier curve
+						p1.x = std::clamp(p1.x, p0.x, p3.x);
+						p2.x = std::clamp(p2.x, p0.x, p3.x);
+
+						// solve x(a) = time for a
+						a = std::clamp(SolveBezier(Time, p0.x, p1.x, p2.x, p3.x), 0.0f, 1.0f);
+
+						// value = y(t)
+						if(c == 0)
+							Position.x = bezier(p0.y, p1.y, p2.y, p3.y, a);
+						else if(c == 1)
+							Position.y = bezier(p0.y, p1.y, p2.y, p3.y, a);
+						else if(c == 2)
+							Angle = bezier(p0.y, p1.y, p2.y, p3.y, a)/360.0f*pi*2.0f;
+					}
+
+					return;
+				}
+				default:
+				{
+					// linear
+				}
+			}
+			// X
+			{
+				float v0 = fx2f(EnvelopePoints.GetPoint(i)->m_aValues[0]);
+				float v1 = fx2f(EnvelopePoints.GetPoint(i+1)->m_aValues[0]);
+				Position.x = v0 + (v1-v0) * a;
+			}
+			// Y
+			{
+				float v0 = fx2f(EnvelopePoints.GetPoint(i)->m_aValues[1]);
+				float v1 = fx2f(EnvelopePoints.GetPoint(i+1)->m_aValues[1]);
+				Position.y = v0 + (v1-v0) * a;
+			}
+			// angle
+			{
+				float v0 = fx2f(EnvelopePoints.GetPoint(i)->m_aValues[2]);
+				float v1 = fx2f(EnvelopePoints.GetPoint(i+1)->m_aValues[2]);
+				Angle = (v0 + (v1-v0) * a)/360.0f*pi*2.0f;
+			}
+			return;
+		}
+	}
+	Position.x = fx2f(EnvelopePoints.GetPoint(EnvelopePoints.NumPoints()-1)->m_aValues[0]);
+	Position.y = fx2f(EnvelopePoints.GetPoint(EnvelopePoints.NumPoints()-1)->m_aValues[1]);
+	Angle = fx2f(EnvelopePoints.GetPoint(EnvelopePoints.NumPoints()-1)->m_aValues[2]);
+	return;
+}
+
+bool CCollision::OutOfRange(double value, double q0, double q1, double q2, double q3) const
+{
+	if(q0 > q1)
+	{
+		if(q2 > q3)
+		{
+			const double Min = minimum(q1, q3);
+			if(value < Min)
+				return true;
+			const double Max = maximum(q0, q2);
+			if(value > Max)
+				return true;
+		}
+		else
+		{
+			const double Min = minimum(q1, q2);
+			if(value < Min)
+				return true;
+			const double Max = maximum(q0, q3);
+			if(value > Max)
+				return true;
+		}
+	}
+	else
+	{
+		// q1 is bigger than q0
+		if(q2 > q3)
+		{
+			const double Min = minimum(q0, q3);
+			if(value < Min)
+				return true;
+			const double Max = maximum(q1, q2);
+			if(value > Max)
+				return true;
+		}
+		else
+		{
+			// q3 is bigger than q2
+			const double Min = minimum(q0, q2);
+			if(value < Min)
+				return true;
+			const double Max = maximum(q1, q3);
+			if(value > Max)
+				return true;
+		}
+	}
+	return false;
+}
+
+//t0, t1 and t2 are position of triangle vertices
+bool CCollision::InsideTriangle(const vec2& t0, const vec2& t1, const vec2& t2, const vec2& p) const
+{
+    vec3 bary = BarycentricCoordinates(t0, t1, t2, p);
+    return (bary.x >= 0.0f && bary.y >= 0.0f && bary.x + bary.y < 1.0f);
+}
+//q0, q1, q2 and q3 are position of quad vertices
+bool CCollision::InsideQuad(const vec2& q0, const vec2& q1, const vec2& q2, const vec2& q3, const vec2& p) const
+{
+	return InsideTriangle(q0, q1, q2, p) || InsideTriangle(q1, q2, q3, p);
+}
+
+vec3 CCollision::BarycentricCoordinates(const vec2& t0, const vec2& t1, const vec2& t2, const vec2& p) const
+{
+    vec2 e0 = t1 - t0;
+    vec2 e1 = t2 - t0;
+    vec2 e2 = p - t0;
+    
+    float d00 = dot(e0, e0);
+    float d01 = dot(e0, e1);
+    float d11 = dot(e1, e1);
+    float d20 = dot(e2, e0);
+    float d21 = dot(e2, e1);
+    float denom = d00 * d11 - d01 * d01;
+    
+    vec3 bary;
+    bary.x = (d11 * d20 - d01 * d21) / denom;
+    bary.y = (d00 * d21 - d01 * d20) / denom;
+    bary.z = 1.0f - bary.x - bary.y;
+    
+    return bary;
 }
