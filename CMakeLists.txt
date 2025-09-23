@@ -2845,6 +2845,15 @@ if(SERVER)
     envelopeaccess.cpp
     envelopeaccess.h
   )
+  if(NOT(GAME_GENERATED_CLIENT))
+    set(GAME_GENERATED_CLIENT
+      src/generated/checksum.cpp
+      src/generated/client_data.cpp
+      src/generated/client_data.h
+      src/generated/client_data7.cpp
+      src/generated/client_data7.h
+    )
+  endif()
   set(SERVER_SRC ${ENGINE_SERVER_WITHOUT_MAIN} ${GAME_SERVER} ${GAME_GENERATED_SERVER} ${GAME_KZ} ${GAME_GENERATED_CLIENT})
   if(TARGET_OS STREQUAL "windows")
     set(VERSION_EXECUTABLE "${SERVER_EXECUTABLE}")
