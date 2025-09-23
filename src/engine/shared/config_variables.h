@@ -788,3 +788,4 @@ MACRO_CONFIG_INT(SvDamageTurretExplosiveDmg, sv_damage_turret_explosive_dmg, 3, 
 MACRO_CONFIG_INT(SvDamageMineDmg, sv_damage_mine_dmg, 3, 0, 10000, CFGFLAG_SERVER | CFGFLAG_GAME, "Mines damage")
 
 MACRO_CONFIG_INT(SvGoresQuadsEnable, sv_kog_qquads_enable, 0, 0, 1, CFGFLAG_SERVER | CFGFLAG_GAME, "Gores compatibility: Moving tiles")
+MACRO_CONFIG_INT(SvGoresGrenadeTele, sv_kog_grenade_tele, 0, 0, 1, CFGFLAG_SERVER | CFGFLAG_GAME, "Gores compatibility: Teleport grenade")

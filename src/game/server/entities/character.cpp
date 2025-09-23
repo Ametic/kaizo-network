@@ -629,22 +629,61 @@ void CCharacter::FireWeapon()
 
 	case WEAPON_GRENADE:
 	{
-		int Lifetime = (int)(Server()->TickSpeed() * GetTuning(m_TuneZone)->m_GrenadeLifetime);
 
-		new CProjectile(
-			GameWorld(),
-			WEAPON_GRENADE, //Type
-			m_pPlayer->GetCid(), //Owner
-			ProjStartPos, //Pos
-			Direction, //Dir
-			Lifetime, //Span
-			false, //Freeze
-			true, //Explosive
-			SOUND_GRENADE_EXPLODE, //SoundImpact
-			MouseTarget // MouseTarget
-		);
+		bool gores_dontfire = false;
 
-		GameServer()->CreateSound(m_Pos, SOUND_GRENADE_FIRE, TeamMask()); // NOLINT(clang-analyzer-unix.Malloc)
+		if(g_Config.m_SvGoresGrenadeTele)
+		{
+			for(CProjectile * pProj = (CProjectile *)GameWorld()->FindFirst(CGameWorld::ENTTYPE_PROJECTILE); pProj; pProj = (CProjectile *)pProj->TypeNext())
+			{
+				if(pProj->m_GoresTeleportGrenade && pProj->GetOwnerId() == m_pPlayer->GetCid() && pProj->GetType())
+				{
+					gores_dontfire = true;
+
+					bool Found;
+					vec2 PossiblePos;
+
+					Found = GetNearestAirPos(pProj->GetPos((Server()->Tick() - pProj->GetStartTick() - 1) / (float)Server()->TickSpeed()), pProj->GetPos((Server()->Tick() - pProj->GetStartTick()) / (float)Server()->TickSpeed()), &PossiblePos);
+
+					if(Found)
+					{
+						m_TeleGunPos = PossiblePos;
+						m_TeleGunTeleport = true;
+						m_IsBlueTeleGunTeleport = false;
+
+						pProj->Reset();
+					}
+
+					break;
+				}
+			}
+		}
+
+		if(!gores_dontfire)
+		{
+			int Lifetime = (int)(Server()->TickSpeed() * GetTuning(m_TuneZone)->m_GrenadeLifetime);
+
+			CProjectile * p = new CProjectile(
+				GameWorld(),
+				WEAPON_GRENADE, //Type
+				m_pPlayer->GetCid(), //Owner
+				ProjStartPos, //Pos
+				Direction, //Dir
+				Lifetime, //Span
+				false, //Freeze
+				true, //Explosive
+				SOUND_GRENADE_EXPLODE, //SoundImpact
+				MouseTarget // MouseTarget
+			);
+
+			if(!p)
+				return;
+			
+			if(g_Config.m_SvGoresGrenadeTele)
+				p->m_GoresTeleportGrenade = true;
+
+			GameServer()->CreateSound(m_Pos, SOUND_GRENADE_FIRE, TeamMask()); // NOLINT(clang-analyzer-unix.Malloc)
+		}
 	}
 	break;
 
