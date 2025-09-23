@@ -10,8 +10,6 @@
 #include <engine/shared/datafile.h>
 #include <engine/shared/map.h>
 
-#include <generated/client_data.h>
-
 #include <game/mapitems.h>
 #include <game/mapitems_ex.h>
 
