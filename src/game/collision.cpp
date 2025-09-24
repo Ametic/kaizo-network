@@ -447,6 +447,8 @@ int CCollision::IntersectLine(vec2 Pos0, vec2 Pos1, vec2 *pOutCollision, vec2 *p
 		ProjectileParams.pOutCollision = pOutCollision;
 		ProjectileParams.pOutBeforeCollision = pOutBeforeCollision;
 		ProjectileParams.Weapon = pIntersectLineParams->Weapon;
+		ProjectileParams.m_IsDDraceProjectile = pIntersectLineParams->m_IsDDraceProjectile;
+		ProjectileParams.m_pDoResetTick = &pIntersectLineParams->m_DoResetTick;
 	}
 
 	float Distance = distance(Pos0, Pos1);

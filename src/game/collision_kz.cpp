@@ -280,7 +280,15 @@ int CCollision::CheckPointForProjectile(vec2 Pos, SKZColProjectileParams *pProje
 	{
 		if(pKZFrontTile->m_Index == KZ_FRONTTILE_POS_SHIFTER && BitWiseAndInt64(pKZFrontTile->m_Value3, KZ_POS_SWITCHER_FLAG_PROJECTILE) && ((pKZFrontTile->m_Number && OwnerId >= 0 && OwnerId < SERVER_MAX_CLIENTS && !m_pWorldCore->m_vSwitchers.empty()) ? m_pWorldCore->m_vSwitchers[pKZFrontTile->m_Number].m_aStatus[m_pTeamsCore->Team(OwnerId)] : true))
 		{
-			*pProjPos += vec2(pKZFrontTile->m_Value1, pKZFrontTile->m_Value2);
+			if(pProjectileParams->m_IsDDraceProjectile && pProjectileParams->m_pDoResetTick) //they will stay forever, dont shift it to impossible values
+			{
+				*pProjPos = Pos + vec2(pKZFrontTile->m_Value1, pKZFrontTile->m_Value2);
+				*pProjectileParams->m_pDoResetTick = true;
+			}
+			else
+			{
+				*pProjPos += vec2(pKZFrontTile->m_Value1, pKZFrontTile->m_Value2);
+			}
 			return -1;
 		}
 	}

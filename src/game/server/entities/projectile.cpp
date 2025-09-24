@@ -144,6 +144,7 @@ void CProjectile::Tick()
 	ParamsKZ.IsWeapon = true;
 	ParamsKZ.pProjPos = &m_Pos;
 	ParamsKZ.Weapon = m_Type;
+	ParamsKZ.m_IsDDraceProjectile = m_Freeze;
 
 	SKZQuadData * pQuadData = nullptr;
 	vec2 QuadColPos;
@@ -151,6 +152,9 @@ void CProjectile::Tick()
 	if(g_Config.m_SvGoresQuadsEnable)
 		pQuadData = Collision()->IntersectQuad(PrevPos, CurPos, &QuadColPos);
 	int Collide = GameServer()->Collision()->IntersectLine(PrevPos, CurPos, &ColPos, &NewPos, &ParamsKZ); // KZ
+
+	if(ParamsKZ.m_DoResetTick)
+		m_StartTick = Server()->Tick();
 
 	//+KZ Quads:
 	if(pQuadData && Collide)
