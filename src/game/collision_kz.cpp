@@ -1196,97 +1196,188 @@ void CCollision::PushBoxOutsideQuads(vec2 *pPos, vec2 *pInOutVel, vec2 Size, CCh
 			if(docontinue)
 				continue;
 
+			//First get out of the quad if we are inside
+			if(InsideQuad(m_aKZQuads[i].m_CachedPos[0], m_aKZQuads[i].m_CachedPos[1], m_aKZQuads[i].m_CachedPos[2], m_aKZQuads[i].m_CachedPos[3], *pPos))
+			{
+				//0 = left
+				//1 = up
+				//2 = down
+				//3 = right
+
+				bool intersected[4] = {false,false,false,false};
+				vec2 intersect[4];
+
+				//we have no idea how is quad rotated nor the quad shape, we will use IntersectQuad()
+				intersected[0] = IntersectQuad(*pPos,vec2(pPos->x - 30, pPos->y),&intersect[0],nullptr,nullptr,m_aKZQuads[i].m_CachedPos[0],m_aKZQuads[i].m_CachedPos[1],m_aKZQuads[i].m_CachedPos[2],m_aKZQuads[i].m_CachedPos[3]);
+				intersected[1] = IntersectQuad(*pPos,vec2(pPos->x, pPos->y - 30),&intersect[1],nullptr,nullptr,m_aKZQuads[i].m_CachedPos[0],m_aKZQuads[i].m_CachedPos[1],m_aKZQuads[i].m_CachedPos[2],m_aKZQuads[i].m_CachedPos[3]);
+				intersected[2] = IntersectQuad(*pPos,vec2(pPos->x, pPos->y + 30),&intersect[2],nullptr,nullptr,m_aKZQuads[i].m_CachedPos[0],m_aKZQuads[i].m_CachedPos[1],m_aKZQuads[i].m_CachedPos[2],m_aKZQuads[i].m_CachedPos[3]);
+				intersected[3] = IntersectQuad(*pPos,vec2(pPos->x + 30, pPos->y),&intersect[3],nullptr,nullptr,m_aKZQuads[i].m_CachedPos[0],m_aKZQuads[i].m_CachedPos[1],m_aKZQuads[i].m_CachedPos[2],m_aKZQuads[i].m_CachedPos[3]);
 			
-				if(!horizontal)
+				int found = -1;
+
+				for(int i = 0; i < 4; i++)
 				{
-					float altdown[4] = {-9999,-9999,-9999,-9999};
-					
-					//commented, always do vertical collision for all lines
-					//if(std::abs(m_aKZQuads[i].m_CachedPos[0].x - m_aKZQuads[i].m_CachedPos[1].x) >= std::abs(m_aKZQuads[i].m_CachedPos[0].y - m_aKZQuads[i].m_CachedPos[1].y))
-						altdown[0] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[0], m_aKZQuads[i].m_CachedPos[1]);
-					//if(std::abs(m_aKZQuads[i].m_CachedPos[1].x - m_aKZQuads[i].m_CachedPos[3].x) >= std::abs(m_aKZQuads[i].m_CachedPos[1].y - m_aKZQuads[i].m_CachedPos[3].y))
-						altdown[1] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[1], m_aKZQuads[i].m_CachedPos[3]);
-					//if(std::abs(m_aKZQuads[i].m_CachedPos[3].x - m_aKZQuads[i].m_CachedPos[2].x) >= std::abs(m_aKZQuads[i].m_CachedPos[3].y - m_aKZQuads[i].m_CachedPos[2].y))
-						altdown[2] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[3], m_aKZQuads[i].m_CachedPos[2]);
-					//if(std::abs(m_aKZQuads[i].m_CachedPos[2].x - m_aKZQuads[i].m_CachedPos[0].x) >= std::abs(m_aKZQuads[i].m_CachedPos[2].y - m_aKZQuads[i].m_CachedPos[0].y))
-						altdown[3] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[2], m_aKZQuads[i].m_CachedPos[0]);
-					
-					float finalaltdown = altdown[0];
-
-					for(int k = 1; k < 4; k++)
-					{
-						if(std::abs(finalaltdown - pPos->y) > std::abs(altdown[k] - pPos->y))
-							finalaltdown = altdown[k];
-					}
-
-					if (finalaltdown == -9999)
-					{
+					if(!intersected[i])
 						continue;
+
+					if(intersected[i] && found == -1)
+					{
+						found = i;
 					}
 
-					if(finalaltdown <= pPos->y + Size.y && finalaltdown > pPos->y)
+					if(found != -1 && intersected[i] && distance(*pPos, intersect[found]) > distance(*pPos, intersect[i]))
 					{
-						pPos->y = finalaltdown - Size.y;
-						if(pInOutVel->y > 0)
-							pInOutVel->y = 0;
-
-						if(pGrounded && m_aKZQuads[i].m_Type != KZQUADTYPE_STOPA) //set grounded if not stopper quad
-						{
-							*pGrounded = true;
-						}
-					}
-					else if(finalaltdown >= pPos->y - Size.y && finalaltdown < pPos->y)
-					{
-						pPos->y = finalaltdown + Size.y;
-						if(pInOutVel->y < 0)
-							pInOutVel->y = 0;
+						found = i;
 					}
 				}
-				else
+
+				if(found != -1)
 				{
-
-					float altdown[4] = {-9999,-9999,-9999,-9999};
-					
-					if(std::abs(m_aKZQuads[i].m_CachedPos[0].x - m_aKZQuads[i].m_CachedPos[1].x) < std::abs(m_aKZQuads[i].m_CachedPos[0].y - m_aKZQuads[i].m_CachedPos[1].y))
-						altdown[0] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[0], m_aKZQuads[i].m_CachedPos[1]);
-					if(std::abs(m_aKZQuads[i].m_CachedPos[1].x - m_aKZQuads[i].m_CachedPos[3].x) < std::abs(m_aKZQuads[i].m_CachedPos[1].y - m_aKZQuads[i].m_CachedPos[3].y))
-						altdown[1] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[1], m_aKZQuads[i].m_CachedPos[3]);
-					if(std::abs(m_aKZQuads[i].m_CachedPos[3].x - m_aKZQuads[i].m_CachedPos[2].x) < std::abs(m_aKZQuads[i].m_CachedPos[3].y - m_aKZQuads[i].m_CachedPos[2].y))
-						altdown[2] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[3], m_aKZQuads[i].m_CachedPos[2]);
-					if(std::abs(m_aKZQuads[i].m_CachedPos[2].x - m_aKZQuads[i].m_CachedPos[0].x) < std::abs(m_aKZQuads[i].m_CachedPos[2].y - m_aKZQuads[i].m_CachedPos[0].y))
-						altdown[3] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[2], m_aKZQuads[i].m_CachedPos[0]);
-					
-					float finalaltdown = altdown[0];
-
-					for(int k = 1; k < 4; k++)
+					switch (found)
 					{
-						if(std::abs(finalaltdown - pPos->x) > std::abs(altdown[k] - pPos->x))
-							finalaltdown = altdown[k];
-					}
-
-					if (finalaltdown == -9999)
-					{
-						continue;
-					}
-
-					if(finalaltdown <= pPos->x + Size.x && finalaltdown > pPos->x)
-					{
-						pPos->x = finalaltdown - Size.x;
+					case 0: // left
+						pPos->x = intersect[0].x - Size.x;
 						if(pInOutVel->x > 0)
 							pInOutVel->x = 0;
-					}
-					else if(finalaltdown >= pPos->x - Size.x && finalaltdown < pPos->x)
-					{
-						pPos->x = finalaltdown + Size.x;
+						break;
+					case 1: // up
+						pPos->y = intersect[0].y - Size.y;
+						if(pInOutVel->y > 0)
+							pInOutVel->y = 0;
+						break;
+					case 2: // down
+						pPos->y = intersect[0].y + Size.y;
+						if(pInOutVel->y < 0)
+							pInOutVel->y = 0;
+						break;
+					case 3: // right
+						pPos->x = intersect[0].x + Size.x;
 						if(pInOutVel->x < 0)
 							pInOutVel->x = 0;
+						break;
+					}
+
+					//update checking box
+
+					if(!horizontal)
+					{
+						BoxCorners[0].x = pPos->x - Size.x + 1;
+						BoxCorners[0].y = pPos->y - Size.y + pInOutVel->y;
+
+						BoxCorners[1].x = pPos->x + Size.x - 1;
+						BoxCorners[1].y = pPos->y - Size.y + pInOutVel->y;
+
+						BoxCorners[2].x = pPos->x - Size.x + 1;
+						BoxCorners[2].y = pPos->y + Size.y + pInOutVel->y;
+
+						BoxCorners[3].x = pPos->x + Size.x - 1;
+						BoxCorners[3].y = pPos->y + Size.y + pInOutVel->y;
+					}
+					else
+					{
+						BoxCorners[0].x = pPos->x - Size.x + pInOutVel->x;
+						BoxCorners[0].y = pPos->y - Size.y + pInOutVel->y + 1;
+
+						BoxCorners[1].x = pPos->x + Size.x + pInOutVel->x;
+						BoxCorners[1].y = pPos->y - Size.y + pInOutVel->y - 1;
+
+						BoxCorners[2].x = pPos->x - Size.x + pInOutVel->x;
+						BoxCorners[2].y = pPos->y + Size.y + pInOutVel->y + 1;
+
+						BoxCorners[3].x = pPos->x + Size.x + pInOutVel->x;
+						BoxCorners[3].y = pPos->y + Size.y + pInOutVel->y - 1;
 					}
 				}
+			}
 
-				if(pCore)
+			if(!horizontal)
+			{
+				float altdown[4] = {-9999, -9999, -9999, -9999};
+
+				if(std::abs(m_aKZQuads[i].m_CachedPos[0].x - m_aKZQuads[i].m_CachedPos[1].x) != 0)
+					altdown[0] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[0], m_aKZQuads[i].m_CachedPos[1]);
+				if(std::abs(m_aKZQuads[i].m_CachedPos[1].x - m_aKZQuads[i].m_CachedPos[3].x) != 0)
+					altdown[1] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[1], m_aKZQuads[i].m_CachedPos[3]);
+				if(std::abs(m_aKZQuads[i].m_CachedPos[3].x - m_aKZQuads[i].m_CachedPos[2].x) != 0)
+					altdown[2] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[3], m_aKZQuads[i].m_CachedPos[2]);
+				if(std::abs(m_aKZQuads[i].m_CachedPos[2].x - m_aKZQuads[i].m_CachedPos[0].x) != 0)
+					altdown[3] = CalculateSlopeAltitude(BoxCorners[2].x, BoxCorners[3].x, m_aKZQuads[i].m_CachedPos[2], m_aKZQuads[i].m_CachedPos[0]);
+
+				float finalaltdown = altdown[0];
+
+				for(int k = 1; k < 4; k++)
 				{
-					pCore->m_SendCoreThisTick = true;
+					if(std::abs(finalaltdown - pPos->y) > std::abs(altdown[k] - pPos->y))
+						finalaltdown = altdown[k];
 				}
+
+				if(finalaltdown == -9999)
+				{
+					continue;
+				}
+
+				if(finalaltdown <= pPos->y + Size.y && finalaltdown > pPos->y)
+				{
+					pPos->y = finalaltdown - Size.y;
+					if(pInOutVel->y > 0)
+						pInOutVel->y = 0;
+
+					if(pGrounded && m_aKZQuads[i].m_Type != KZQUADTYPE_STOPA) // set grounded if not stopper quad
+					{
+						*pGrounded = true;
+					}
+				}
+				else if(finalaltdown >= pPos->y - Size.y && finalaltdown < pPos->y)
+				{
+					pPos->y = finalaltdown + Size.y;
+					if(pInOutVel->y < 0)
+						pInOutVel->y = 0;
+				}
+			}
+			else
+			{
+				float altdown[4] = {-9999, -9999, -9999, -9999};
+
+				if(std::abs(m_aKZQuads[i].m_CachedPos[0].x - m_aKZQuads[i].m_CachedPos[1].x) < std::abs(m_aKZQuads[i].m_CachedPos[0].y - m_aKZQuads[i].m_CachedPos[1].y))
+					altdown[0] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[0], m_aKZQuads[i].m_CachedPos[1]);
+				if(std::abs(m_aKZQuads[i].m_CachedPos[1].x - m_aKZQuads[i].m_CachedPos[3].x) < std::abs(m_aKZQuads[i].m_CachedPos[1].y - m_aKZQuads[i].m_CachedPos[3].y))
+					altdown[1] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[1], m_aKZQuads[i].m_CachedPos[3]);
+				if(std::abs(m_aKZQuads[i].m_CachedPos[3].x - m_aKZQuads[i].m_CachedPos[2].x) < std::abs(m_aKZQuads[i].m_CachedPos[3].y - m_aKZQuads[i].m_CachedPos[2].y))
+					altdown[2] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[3], m_aKZQuads[i].m_CachedPos[2]);
+				if(std::abs(m_aKZQuads[i].m_CachedPos[2].x - m_aKZQuads[i].m_CachedPos[0].x) < std::abs(m_aKZQuads[i].m_CachedPos[2].y - m_aKZQuads[i].m_CachedPos[0].y))
+					altdown[3] = CalculateSlopeAltitudeSide(BoxCorners[1].y, BoxCorners[3].y, m_aKZQuads[i].m_CachedPos[2], m_aKZQuads[i].m_CachedPos[0]);
+
+				float finalaltdown = altdown[0];
+
+				for(int k = 1; k < 4; k++)
+				{
+					if(std::abs(finalaltdown - pPos->x) > std::abs(altdown[k] - pPos->x))
+						finalaltdown = altdown[k];
+				}
+
+				if(finalaltdown == -9999)
+				{
+					continue;
+				}
+
+				if(finalaltdown <= pPos->x + Size.x && finalaltdown > pPos->x)
+				{
+					pPos->x = finalaltdown - Size.x;
+					if(pInOutVel->x > 0)
+						pInOutVel->x = 0;
+				}
+				else if(finalaltdown >= pPos->x - Size.x && finalaltdown < pPos->x)
+				{
+					pPos->x = finalaltdown + Size.x;
+					if(pInOutVel->x < 0)
+						pInOutVel->x = 0;
+				}
+			}
+
+			if(pCore)
+			{
+				pCore->m_SendCoreThisTick = true;
+			}
 			
 		}
 
@@ -1439,7 +1530,7 @@ SKZQuadData * CCollision::IntersectQuad(vec2 From, vec2 To, vec2 *pOut, vec2 *pL
 		if(m_aKZQuads[i].m_Type != KZQUADTYPE_HOOK && m_aKZQuads[i].m_Type != KZQUADTYPE_UNHOOK)
 			continue;
 
-		if(IntersectQuad(From,To,pOut,pLineStart,pLineStart,m_aKZQuads[i].m_CachedPos[0],m_aKZQuads[i].m_CachedPos[1],m_aKZQuads[i].m_CachedPos[2],m_aKZQuads[i].m_CachedPos[3]))
+		if(IntersectQuad(From,To,pOut,pLineStart,pLineEnd,m_aKZQuads[i].m_CachedPos[0],m_aKZQuads[i].m_CachedPos[1],m_aKZQuads[i].m_CachedPos[2],m_aKZQuads[i].m_CachedPos[3]))
 		{
 			pQuad = &m_aKZQuads[i];
 			break;
