@@ -20,8 +20,8 @@
 #include <game/server/entities/kz/kz_light.h>
 #include <game/server/entities/kz/mine.h>
 
-#define GAME_TYPE_NAME "DDraceNetwork"
-#define TEST_TYPE_NAME "TestDDraceNetwork"
+#define GAME_TYPE_NAME "Kaizo"
+#define TEST_TYPE_NAME "TestKaizo"
 
 CGameControllerKZ::CGameControllerKZ(class CGameContext *pGameServer) :
 	CGameControllerDDRace(pGameServer)
