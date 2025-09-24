@@ -898,6 +898,7 @@ bool CCollision::HandlePortalCollision(vec2 &InOutPos, vec2 &InOutVel, CCharacte
 			{
 				InOutPos = OutPos;
 				InOutVel = OutVel;
+				pCore->m_DontCheckPlayerCollisionOnThisMove = true;
                 return true;
 			}
         }

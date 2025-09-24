@@ -300,6 +300,7 @@ public: // KZ
 
 	// +KZ
 	bool m_SendCoreThisTick = false;
+	bool m_DontCheckPlayerCollisionOnThisMove = false;
 	bool m_QuadGrounded = false;
 	SKZQuadData * m_pHookedQuad = nullptr;
 	vec2 m_HookedQuadPos;
