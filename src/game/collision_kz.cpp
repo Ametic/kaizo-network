@@ -1151,29 +1151,29 @@ void CCollision::PushBoxOutsideQuads(vec2 *pPos, vec2 *pInOutVel, vec2 Size, CCh
 		if(!horizontal)
 		{
 			BoxCorners[0].x = pPos->x - Size.x + 1;
-			BoxCorners[0].y = pPos->y - Size.y + pInOutVel->y;
+			BoxCorners[0].y = pPos->y - Size.y + (pInOutVel->y < 0 ? pInOutVel->y : 0);
 
 			BoxCorners[1].x = pPos->x + Size.x - 1;
-			BoxCorners[1].y = pPos->y - Size.y + pInOutVel->y;
+			BoxCorners[1].y = pPos->y - Size.y + (pInOutVel->y < 0 ? pInOutVel->y : 0);
 
 			BoxCorners[2].x = pPos->x - Size.x + 1;
-			BoxCorners[2].y = pPos->y + Size.y + pInOutVel->y;
+			BoxCorners[2].y = pPos->y + Size.y + (pInOutVel->y > 0 ? pInOutVel->y : 0);
 
 			BoxCorners[3].x = pPos->x + Size.x - 1;
-			BoxCorners[3].y = pPos->y + Size.y + pInOutVel->y;
+			BoxCorners[3].y = pPos->y + Size.y + (pInOutVel->y > 0 ? pInOutVel->y : 0);
 		}
 		else
 		{
-			BoxCorners[0].x = pPos->x - Size.x + pInOutVel->x;
+			BoxCorners[0].x = pPos->x - Size.x + (pInOutVel->x < 0 ? pInOutVel->x : 0);
 			BoxCorners[0].y = pPos->y - Size.y + pInOutVel->y + 1;
 
-			BoxCorners[1].x = pPos->x + Size.x + pInOutVel->x;
+			BoxCorners[1].x = pPos->x + Size.x + (pInOutVel->x > 0 ? pInOutVel->x : 0);
 			BoxCorners[1].y = pPos->y - Size.y + pInOutVel->y - 1;
 
-			BoxCorners[2].x = pPos->x - Size.x + pInOutVel->x;
+			BoxCorners[2].x = pPos->x - Size.x + (pInOutVel->x < 0 ? pInOutVel->x : 0);
 			BoxCorners[2].y = pPos->y + Size.y + pInOutVel->y + 1;
 
-			BoxCorners[3].x = pPos->x + Size.x + pInOutVel->x;
+			BoxCorners[3].x = pPos->x + Size.x + (pInOutVel->x > 0 ? pInOutVel->x : 0);
 			BoxCorners[3].y = pPos->y + Size.y + pInOutVel->y - 1;
 		}
 
@@ -1262,32 +1262,35 @@ void CCollision::PushBoxOutsideQuads(vec2 *pPos, vec2 *pInOutVel, vec2 Size, CCh
 					if(!horizontal)
 					{
 						BoxCorners[0].x = pPos->x - Size.x + 1;
-						BoxCorners[0].y = pPos->y - Size.y + pInOutVel->y;
+						BoxCorners[0].y = pPos->y - Size.y + (pInOutVel->y < 0 ? pInOutVel->y : 0);
 
 						BoxCorners[1].x = pPos->x + Size.x - 1;
-						BoxCorners[1].y = pPos->y - Size.y + pInOutVel->y;
+						BoxCorners[1].y = pPos->y - Size.y + (pInOutVel->y < 0 ? pInOutVel->y : 0);
 
 						BoxCorners[2].x = pPos->x - Size.x + 1;
-						BoxCorners[2].y = pPos->y + Size.y + pInOutVel->y;
+						BoxCorners[2].y = pPos->y + Size.y + (pInOutVel->y > 0 ? pInOutVel->y : 0);
 
 						BoxCorners[3].x = pPos->x + Size.x - 1;
-						BoxCorners[3].y = pPos->y + Size.y + pInOutVel->y;
+						BoxCorners[3].y = pPos->y + Size.y + (pInOutVel->y > 0 ? pInOutVel->y : 0);
 					}
 					else
 					{
-						BoxCorners[0].x = pPos->x - Size.x + pInOutVel->x;
+						BoxCorners[0].x = pPos->x - Size.x + (pInOutVel->x < 0 ? pInOutVel->x : 0);
 						BoxCorners[0].y = pPos->y - Size.y + pInOutVel->y + 1;
 
-						BoxCorners[1].x = pPos->x + Size.x + pInOutVel->x;
+						BoxCorners[1].x = pPos->x + Size.x + (pInOutVel->x > 0 ? pInOutVel->x : 0);
 						BoxCorners[1].y = pPos->y - Size.y + pInOutVel->y - 1;
 
-						BoxCorners[2].x = pPos->x - Size.x + pInOutVel->x;
+						BoxCorners[2].x = pPos->x - Size.x + (pInOutVel->x < 0 ? pInOutVel->x : 0);
 						BoxCorners[2].y = pPos->y + Size.y + pInOutVel->y + 1;
 
-						BoxCorners[3].x = pPos->x + Size.x + pInOutVel->x;
+						BoxCorners[3].x = pPos->x + Size.x + (pInOutVel->x > 0 ? pInOutVel->x : 0);
 						BoxCorners[3].y = pPos->y + Size.y + pInOutVel->y - 1;
 					}
 				}
+
+				if(pCore)
+					pCore->m_SendCoreThisTick = true;
 			}
 
 			if(!horizontal)
@@ -1316,7 +1319,7 @@ void CCollision::PushBoxOutsideQuads(vec2 *pPos, vec2 *pInOutVel, vec2 Size, CCh
 					continue;
 				}
 
-				if(finalaltdown <= pPos->y + Size.y && finalaltdown > pPos->y)
+				if(finalaltdown <= BoxCorners[2].y && finalaltdown > pPos->y)
 				{
 					pPos->y = finalaltdown - Size.y;
 					if(pInOutVel->y > 0)
@@ -1327,7 +1330,7 @@ void CCollision::PushBoxOutsideQuads(vec2 *pPos, vec2 *pInOutVel, vec2 Size, CCh
 						*pGrounded = true;
 					}
 				}
-				else if(finalaltdown >= pPos->y - Size.y && finalaltdown < pPos->y)
+				else if(finalaltdown >= BoxCorners[0].y && finalaltdown < pPos->y)
 				{
 					pPos->y = finalaltdown + Size.y;
 					if(pInOutVel->y < 0)
@@ -1360,13 +1363,13 @@ void CCollision::PushBoxOutsideQuads(vec2 *pPos, vec2 *pInOutVel, vec2 Size, CCh
 					continue;
 				}
 
-				if(finalaltdown <= pPos->x + Size.x && finalaltdown > pPos->x)
+				if(finalaltdown <= BoxCorners[1].x && finalaltdown > pPos->x)
 				{
 					pPos->x = finalaltdown - Size.x;
 					if(pInOutVel->x > 0)
 						pInOutVel->x = 0;
 				}
-				else if(finalaltdown >= pPos->x - Size.x && finalaltdown < pPos->x)
+				else if(finalaltdown >= BoxCorners[0].x && finalaltdown < pPos->x)
 				{
 					pPos->x = finalaltdown + Size.x;
 					if(pInOutVel->x < 0)
