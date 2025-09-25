@@ -664,15 +664,21 @@ int CCollision::FastIntersectLinePortalLaser(vec2 Pos0, vec2 Pos1, vec2 *pOutCol
 				Pos.x = (Pos.y * (Pos1.x - Pos0.x) + DetPos) / (Pos1.y - Pos0.y);
 			}
 		}
-		if(pOutCollision)
-			*pOutCollision = Pos;
-		if(pOutBeforeCollision)
+		vec2 Dir;
+		if(pOutCollision || pOutBeforeCollision)
 		{
-			vec2 Dir = normalize(Pos1-Pos0);
+			Dir = normalize(Pos1-Pos0);
 			if(Vertical)
 				Dir *= 0.5f / absolute(Dir.x) + 1.f;
 			else
 				Dir *= 0.5f / absolute(Dir.y) + 1.f;
+		}
+		if(pOutCollision)
+		{
+			*pOutCollision = Pos + Dir;
+		}
+		if(pOutBeforeCollision)
+		{
 			*pOutBeforeCollision = Pos - Dir;
 		}
         if(pTeleNr)
